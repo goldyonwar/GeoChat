@@ -8,9 +8,12 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.goldyonwar.geochat.domain.model.UserLocation
 import com.goldyonwar.geochat.domain.repository.UserRepository
+import com.goldyonwar.geochat.domain.usecase.GetDirectionUseCase
 import com.goldyonwar.geochat.service.LocationService
 import com.google.android.gms.maps.model.LatLng
+import com.google.maps.internal.PolylineEncoding
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,16 +23,18 @@ import javax.inject.Inject
 
 @HiltViewModel
 class MapViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val getDirectionUseCase: GetDirectionUseCase
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MapUiState())
     val state = _state.asStateFlow()
 
-    fun onPermissionResult(isGranted: Boolean) {
+    fun onPermissionResult(context: Context, isGranted: Boolean) {
         _state.update { it.copy(isLocationPermissionGranted = isGranted) }
         if (isGranted) {
             startTrackingLocation()
+            toggleTracking(context, true)
         }
     }
 
@@ -49,6 +54,22 @@ class MapViewModel @Inject constructor(
             }
         } else {
             context.stopService(intent)
+        }
+    }
+
+    fun onUserMarkerClick(destination: UserLocation) = viewModelScope.launch {
+        state.value.userLocation?.let { origin ->
+            val result = getDirectionUseCase(
+                origin = UserLocation(origin.latitude, origin.longitude),
+                destination = destination
+            )
+            result.onSuccess { routeInfo ->
+                // Decode the string into LatLng points
+                val path = PolylineEncoding.decode(routeInfo.polylinePoints).map {
+                    LatLng(it.lat, it.lng)
+                }
+                _state.update { it.copy(selectedRoute = path) }
+            }
         }
     }
 

@@ -19,6 +19,11 @@ class ChatRepositoryImpl @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : ChatRepository {
 
+    override suspend fun createChatroom(chatRoom: Chatroom) {
+        val uid = auth.currentUser?.uid ?: return
+        firestore.collection("Chatrooms").document(uid).set(chatRoom).await()
+    }
+
     override fun getChatRooms(): Flow<List<Chatroom>> = callbackFlow {
         val listener = firestore.collection("Chatrooms")
             .addSnapshotListener { snapshot, _ ->
